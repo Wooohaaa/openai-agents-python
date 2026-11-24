@@ -382,6 +382,11 @@ def _get_manifest_entry_by_path(manifest: Manifest, path: Path) -> BaseEntry | N
 
 
 _BLOCK_SCALAR_HEADER = re.compile(r"[>|](?:[1-9][+-]?|[+-][1-9]?)?(?:[ \t]+#.*)?")
+_COLLECTION_START = re.compile(r"[-?](?:[ \t]|$)|[\[{]|.*:(?:[ \t]|$)")
+
+
+def _is_quoted_value(value: str) -> bool:
+    return len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}
 
 
 def _indent_of(line: str) -> int:
@@ -447,10 +452,11 @@ def _take_continuation_lines(
 def _parse_frontmatter(markdown: str) -> dict[str, str]:
     """Read the string metadata subset used by skill indexes, without a YAML dependency.
 
-    Supports single-line values, indented wrapped plain values, and folded/literal blocks
-    with optional indentation/chomping indicators and header comments. Block values have
-    outer whitespace removed for the index; chomping indicators are accepted but do not
-    change that normalization. Internal paragraph breaks and block indentation survive.
+    Supports single-line values, indented wrapped plain values that may start on the next
+    line, and folded/literal blocks with optional indentation/chomping indicators and
+    header comments. Block values have outer whitespace removed for the index. Chomping
+    indicators are accepted but do not change that normalization. Internal paragraph
+    breaks and block indentation survive.
 
     This is not a general YAML loader: tags, aliases, collections, multiline quoted values,
     and quoted escape decoding are not interpreted. Nested fields are consumed without
@@ -495,15 +501,20 @@ def _parse_frontmatter(markdown: str) -> dict[str, str]:
             lines, index, end_index, key_indent, block_header=block_header
         )
 
+        if not parsed_value and continuation:
+            first_value_index = next(
+                offset for offset, item in enumerate(continuation) if item.strip()
+            )
+            first_value = continuation[first_value_index].strip()
+            if _is_quoted_value(first_value) or not _COLLECTION_START.match(first_value):
+                parsed_value = first_value
+                continuation = continuation[first_value_index + 1 :]
+
         if block_header is not None:
             parsed_value = (
                 "\n".join(continuation) if block_header[0] == "|" else _fold_lines(continuation)
             ).strip()
-        elif (
-            len(parsed_value) >= 2
-            and parsed_value[0] == parsed_value[-1]
-            and parsed_value[0] in {"'", '"'}
-        ):
+        elif _is_quoted_value(parsed_value):
             parsed_value = parsed_value[1:-1]
         elif parsed_value and continuation:
             parsed_value = _fold_lines([parsed_value, *(item.strip() for item in continuation)])

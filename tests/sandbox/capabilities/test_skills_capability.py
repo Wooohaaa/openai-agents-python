@@ -576,6 +576,11 @@ class TestSkillsInstructions:
                 id="wrapped_plain_scalar",
             ),
             pytest.param(
+                "description:\n  first line\n  second line",
+                "first line second line",
+                id="plain_scalar_starting_on_next_line",
+            ),
+            pytest.param(
                 "description: >\n  Use for GitHub issue triage.\n\n  Not for PR review.",
                 "Use for GitHub issue triage.\nNot for PR review.",
                 id="folded_block_scalar_with_blank_line",
